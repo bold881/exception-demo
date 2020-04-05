@@ -1,0 +1,131 @@
+kind: BuildConfig
+apiVersion: build.openshift.io/v1
+metadata:
+  name: osms-demo-pipeline
+  namespace: osms-dev
+  selfLink: >-
+    /apis/build.openshift.io/v1/namespaces/osms-dev/buildconfigs/osms-demo-pipeline
+  uid: 718da85c-2a8d-4083-b1d2-747febf30768
+  resourceVersion: '27121836'
+  creationTimestamp: '2020-04-05T13:06:59Z'
+spec:
+  nodeSelector: {}
+  output: {}
+  resources: {}
+  successfulBuildsHistoryLimit: 5
+  failedBuildsHistoryLimit: 5
+  strategy:
+    type: JenkinsPipeline
+    jenkinsPipelineStrategy:
+      jenkinsfile: |-
+        def version,devTag
+
+        node("maven"){
+          stage('build code') {
+            git branch: 'master' , url: 'https://gitlab.dev.onelink.pub/zhengbin/demo.git'
+            version = sh script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout', returnStdout: true
+            devTag  = version + "-"+currentBuild.number
+            echo "Building version ${devTag}"
+            sh "mvn package -DskipTests=true"
+          }
+
+          stage('Test') {
+            sh "mvn test" 
+          }
+
+          stage('Code Analysis') {
+            sh "mvn sonar:sonar -Dsonar.host.url=http://sonarqube:9000 -DskipTests=true"
+          }
+
+          stage('create build config') {
+            script {
+              openshift.withCluster() {
+                openshift.withProject('osms-dev') {
+                  if (!openshift.selector("bc", "demo").exists())
+                    openshift.newBuild("--name=demo", "--image-stream=openshift/java:8", "--binary=true")
+                }
+              }
+            }
+          }
+
+          stage('make image') {
+            echo "Building OpenShift container image demo:${devTag}"
+            script {
+              openshift.withCluster() {
+                openshift.withProject("osms-dev") {
+                  sh "mkdir appdir && cp ./target/*.jar ./appdir"
+                  openshift.selector("bc", "demo").startBuild("--from-dir=appdir/", "--wait=true")
+                  openshift.tag("demo:latest", "demo:${devTag}")
+                }
+              }
+            }
+          }
+
+          stage('create DC') {
+            script {
+              openshift.withCluster() {
+                openshift.withProject('osms-dev') {
+                  if (!openshift.selector('dc', 'demo').exists()){
+                    def app = openshift.newApp("--image-stream=demo:latest","--name=demo")
+                    app.narrow("svc").expose();
+                    
+                    def dc = openshift.selector("dc", "demo")
+                    while (dc.object().spec.replicas != dc.object().status.availableReplicas) {
+                        sleep 10
+                    }
+                    openshift.set("triggers", "dc/demo", "--remove-all")
+                    openshift.set("volume", "dc/demo","--add", "--mount-path=/deployments/config/","--configmap-name=demo-config" )
+                    openshift.set("env", "dc/demo","SPRING_PROFILES_ACTIVE=dev","SERVER_PORT=8080" )
+                    openshift.set("probe", "dc/demo","--readiness", "--get-url=http://:8080/","--initial-delay-seconds=30","--timeout-seconds=2")
+                    openshift.set("probe", "dc/demo","--liveness", "--get-url=http://:8080/","--initial-delay-seconds=30","--timeout-seconds=2")
+                  }
+                }
+              }
+            }
+          }
+
+          stage('Deploy to Dev') {
+            echo "Deploying container image to Development Project"
+            script {
+              //Update the Image on the Development Deployment Config
+              openshift.withCluster() {
+                openshift.withProject("osms-dev") {
+
+                  openshift.set("image", "dc/demo", "demo=image-registry.openshift-image-registry.svc:5000/osms-dev/demo:${devTag}")
+                  if( openshift.selector('configmap', 'demo-config').exists()){
+                    openshift.selector('configmap', 'demo-config').delete()
+                  }
+                  def configmap = openshift.create('configmap', 'demo-config', '--from-file=./configuration/application-dev.yml', '--from-file=./configuration/application-test.yml' , '--from-file=./configuration/application-prod.yml' )
+                  
+                  // update env 
+                  openshift.set("env", "dc/demo","APPLICATION_VERSOIN=${devTag}" )
+
+                  // Deploy the development application.
+                  openshift.selector("dc", "demo").rollout().latest()
+                  
+                  // Wait for application to be deployed
+                  def dc = openshift.selector("dc", "demo").object()
+                  def dc_version = dc.status.latestVersion
+                  def rc = openshift.selector("rc", "demo-${dc_version}").object()
+                  
+                  echo "Waiting for ReplicationController demo-${dc_version} to be ready"
+                  while (rc.spec.replicas != rc.status.readyReplicas) {
+                    sleep 5
+                    rc = openshift.selector("rc", "demo-${dc_version}").object()
+                  }
+                }
+              }
+            }
+          }
+          stage('deploy maven') {
+            //sh "mvn deploy  -DskipTests=true"
+          }
+
+        }
+  postCommit: {}
+  source:
+    type: None
+  triggers: []
+  runPolicy: Serial
+status:
+  lastVersion: 10
