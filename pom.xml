@@ -23,12 +23,7 @@
 		<spring-nohttp-checkstyle.version>0.0.4.RELEASE</spring-nohttp-checkstyle.version>
 		<sonar-maven-plugin.version>3.7.0.1746</sonar-maven-plugin.version>
 		<jacoco-maven-plugin.version>0.8.5</jacoco-maven-plugin.version>
-		<jacoco.utReportFolder>${project.build.directory}/jacoco/test</jacoco.utReportFolder>
-		<jacoco.utReportFile>${jacoco.utReportFolder}/test.exec</jacoco.utReportFile>
-		<jacoco.itReportFolder>${project.build.directory}/jacoco/integrationTest</jacoco.itReportFolder>
-		<jacoco.itReportFile>${jacoco.itReportFolder}/integrationTest.exec</jacoco.itReportFile>
-		<junit.utReportFolder>${project.testresult.directory}/test</junit.utReportFolder>
-		<junit.itReportFolder>${project.testresult.directory}/integrationTest</junit.itReportFolder>
+
 	</properties>
 
 	<dependencies>
@@ -82,50 +77,10 @@
 				<version>${jacoco-maven-plugin.version}</version>
 				<executions>
 					<execution>
-						<id>pre-unit-tests</id>
 						<goals>
 							<goal>prepare-agent</goal>
-						</goals>
-						<configuration>
-							<!-- Sets the path to the file which contains the execution data. -->
-							<destFile>${jacoco.utReportFile}</destFile>
-						</configuration>
-					</execution>
-					<!-- Ensures that the code coverage report for unit tests is created 
-						after unit tests have been run -->
-					<execution>
-						<id>post-unit-test</id>
-						<phase>test</phase>
-						<goals>
 							<goal>report</goal>
 						</goals>
-						<configuration>
-							<dataFile>${jacoco.utReportFile}</dataFile>
-							<outputDirectory>${jacoco.utReportFolder}</outputDirectory>
-						</configuration>
-					</execution>
-					<execution>
-						<id>pre-integration-tests</id>
-						<goals>
-							<goal>prepare-agent-integration</goal>
-						</goals>
-						<configuration>
-							<!-- Sets the path to the file which contains the execution data. -->
-							<destFile>${jacoco.itReportFile}</destFile>
-						</configuration>
-					</execution>
-					<!-- Ensures that the code coverage report for integration tests is 
-						created after integration tests have been run -->
-					<execution>
-						<id>post-integration-tests</id>
-						<phase>post-integration-test</phase>
-						<goals>
-							<goal>report-integration</goal>
-						</goals>
-						<configuration>
-							<dataFile>${jacoco.itReportFile}</dataFile>
-							<outputDirectory>${jacoco.itReportFolder}</outputDirectory>
-						</configuration>
 					</execution>
 				</executions>
 			</plugin>
@@ -161,5 +116,80 @@
 			</plugin>
 		</plugins>
 	</build>
+	<reporting>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>2.9</version>
+				<reportSets>
+					<reportSet>
+						<reports>
+							<report>javadoc</report>
+						</reports>
+					</reportSet>
+				</reportSets>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-pmd-plugin</artifactId>
+				<version>3.8</version>
+			</plugin>
+			<plugin>
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+				<version>2.1.1</version>
+				<configuration>
+					<skipProvidedScope>true</skipProvidedScope>
+					<skipRuntimeScope>true</skipRuntimeScope>
+				</configuration>
+				<reportSets>
+					<reportSet>
+						<reports>
+							<report>aggregate</report>
+						</reports>
+					</reportSet>
+				</reportSets>
+			</plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco-maven-plugin.version}</version>
+				<reportSets>
+					<reportSet>
+						<reports>
+							<report>report</report>
+						</reports>
+					</reportSet>
+				</reportSets>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-checkstyle-plugin</artifactId>
+				<version>3.1.1</version>
+				<reportSets>
+					<reportSet>
+						<reports>
+							<report>checkstyle</report>
+						</reports>
+					</reportSet>
+				</reportSets>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-project-info-reports-plugin</artifactId>
+				<version>2.6</version>
+				<reportSets>
+					<reportSet>
+						<reports>
+							<report>summary</report>
+							<report>dependency-management</report>
+						</reports>
+					</reportSet>
+				</reportSets>
+			</plugin>
+		</plugins>
+	</reporting>
 
 </project>
